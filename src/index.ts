@@ -1,5 +1,5 @@
 export { Waypoint } from "./waypoint.js";
-export { defaultJitter } from "./jitter.js";
+export { defaultJitter, defaultLotteryCheck } from "./jitter.js";
 export { InMemoryAdmissionStore } from "./in-memory-admission-store.js";
 export type {
   ActiveState,
@@ -9,6 +9,7 @@ export type {
   CookieData,
   EvaluateInput,
   JitterFn,
+  LotteryOptions,
   PassVerdict,
   Verdict,
   VerifyResult,

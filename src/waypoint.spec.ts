@@ -322,5 +322,110 @@ describe("Waypoint", () => {
       }
     });
   });
+
+  describe("lottery (one-shot bimodal)", () => {
+    function makeRoomWithLottery(luckyChance: number) {
+      return new Waypoint<{ shop: string }>({
+        secret: SECRET,
+        waitSeconds: { min: 60, max: 120 },
+        activeSeconds: 600,
+        purpose: "test-lottery",
+        lottery: {
+          luckyChance,
+          luckyWaitSeconds: { min: 0, max: 10 },
+        },
+      });
+    }
+
+    async function readEntryAt(room: Waypoint<{ shop: string }>, sessionId: string): Promise<number> {
+      const cookie = room.issueWaiting({ sessionId, shop: "demo" });
+      const verified = await room.verify(cookie, { sessionId, shop: "demo" });
+      if (!verified.ok || verified.state !== "waiting") {
+        throw new Error("expected waiting verdict");
+      }
+      return verified.entryAt;
+    }
+
+    it("assigns each session to lucky-or-not deterministically across calls", async () => {
+      const room = makeRoomWithLottery(0.5);
+      const first = await readEntryAt(room, "session-stable-id");
+      const second = await readEntryAt(room, "session-stable-id");
+      expect(first).toBe(second);
+    });
+
+    it("lucky sessions get a wait in luckyWaitSeconds; unlucky use waitSeconds", async () => {
+      const room = makeRoomWithLottery(0.5);
+      const now = Math.floor(Date.now() / 1000);
+
+      let lucky = 0;
+      let unlucky = 0;
+      for (let ix = 0; ix < 200; ix++) {
+        const entryAt = await readEntryAt(room, `session-${ix}`);
+        const wait = entryAt - now;
+        if (wait <= 10) {
+          lucky++;
+        } else if (wait >= 60 && wait <= 120) {
+          unlucky++;
+        } else {
+          throw new Error(`wait ${wait} fell outside both ranges (sessionId=session-${ix})`);
+        }
+      }
+      expect(lucky + unlucky).toBe(200);
+    });
+
+    it("lucky percentage roughly matches luckyChance over many sessions", async () => {
+      const room = makeRoomWithLottery(0.2);
+      let lucky = 0;
+      const totalSamples = 1000;
+      for (let ix = 0; ix < totalSamples; ix++) {
+        const entryAt = await readEntryAt(room, `large-sample-${ix}`);
+        const wait = entryAt - Math.floor(Date.now() / 1000);
+        if (wait <= 10) lucky++;
+      }
+      const observedRatio = lucky / totalSamples;
+      // 20% target; binomial 95% CI for N=1000 is roughly +/- 2.5%, allow +/- 5%.
+      expect(observedRatio).toBeGreaterThan(0.15);
+      expect(observedRatio).toBeLessThan(0.25);
+    });
+
+    it("without a lottery option, behaviour is unchanged", async () => {
+      const noLottery = new Waypoint<{ shop: string }>({
+        secret: SECRET,
+        waitSeconds: { min: 60, max: 120 },
+        activeSeconds: 600,
+        purpose: "test-no-lottery",
+      });
+      const now = Math.floor(Date.now() / 1000);
+      for (let ix = 0; ix < 50; ix++) {
+        const entryAt = await readEntryAt(noLottery, `nolot-${ix}`);
+        const wait = entryAt - now;
+        expect(wait).toBeGreaterThanOrEqual(60);
+        expect(wait).toBeLessThanOrEqual(120);
+      }
+    });
+
+    it.each<[string, number]>([
+      ["luckyChance == 0", 0],
+      ["luckyChance == 1", 1],
+      ["luckyChance < 0", -0.1],
+      ["luckyChance > 1", 1.5],
+    ])("rejects %s", (_, chance) => {
+      expect(() => new Waypoint<{ shop: string }>({
+        secret: SECRET,
+        waitSeconds: { min: 60, max: 120 },
+        activeSeconds: 600,
+        lottery: { luckyChance: chance, luckyWaitSeconds: { min: 0, max: 10 } },
+      })).toThrow(/luckyChance/);
+    });
+
+    it("rejects invalid luckyWaitSeconds", () => {
+      expect(() => new Waypoint<{ shop: string }>({
+        secret: SECRET,
+        waitSeconds: { min: 60, max: 120 },
+        activeSeconds: 600,
+        lottery: { luckyChance: 0.5, luckyWaitSeconds: { min: 30, max: 10 } },
+      })).toThrow(/luckyWaitSeconds/);
+    });
+  });
 });
 

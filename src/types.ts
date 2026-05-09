@@ -15,6 +15,34 @@ export type WaypointOptions = {
   cookieDomain?: string;
   cookiePath?: string;
   admissionCap?: AdmissionCapOptions;
+  lottery?: LotteryOptions;
+};
+
+/**
+ * One-shot bimodal lottery. Optional opt-in.
+ *
+ * At cookie issuance, each session is independently assigned to either the
+ * "lucky" bucket (probability `luckyChance`) or the regular bucket. Lucky
+ * sessions get their wait drawn from `luckyWaitSeconds`; everyone else
+ * uses the regular `waitSeconds` range. The decision is deterministic per
+ * session-and-day via HMAC, so reloading doesn't re-roll.
+ *
+ * The lottery is intentionally one-shot: it changes the *distribution* of
+ * waits, not the admission protocol. There is no per-attempt retry — each
+ * user gets a single deterministic countdown like the plain splay buffer.
+ *
+ * Recommended when you want a realistic queue UX where a small fraction of
+ * arrivals are fast-tracked while the bulk get a longer (still bounded)
+ * wait. Sized so that *both buckets* spread admissions under origin
+ * capacity — see the README for the math.
+ */
+export type LotteryOptions = {
+  /** Probability in (0, 1) that any given session is assigned to the lucky bucket. */
+  luckyChance: number;
+  /** Wait window for lucky sessions. Should be sized so that
+   *  `luckyArrivals / (luckyWaitSeconds.max - luckyWaitSeconds.min)` stays
+   *  under origin capacity. */
+  luckyWaitSeconds: WaitSeconds;
 };
 
 /**

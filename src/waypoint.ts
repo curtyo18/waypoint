@@ -1,11 +1,12 @@
 import { Waypass } from "waypass";
 import type { TokenPayload } from "waypass";
-import { defaultJitter } from "./jitter.js";
+import { defaultJitter, defaultLotteryCheck } from "./jitter.js";
 import type {
   AdmissionCapOptions,
   CookieData,
   EvaluateInput,
   JitterFn,
+  LotteryOptions,
   Verdict,
   VerifyResult,
   WaitSeconds,
@@ -24,6 +25,8 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
   private readonly activeSeconds: number;
   private readonly jitter: JitterFn;
   private readonly admissionCap: AdmissionCapOptions | undefined;
+  private readonly lottery: LotteryOptions | undefined;
+  private readonly luckyCheck: (sessionId: string, chance: number) => boolean;
 
   constructor(opts: WaypointOptions) {
     if (opts.waitSeconds.min < 0 || opts.waitSeconds.max < opts.waitSeconds.min) {
@@ -46,8 +49,22 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
     if (this.admissionCap && this.admissionCap.perSlot <= 0) {
       throw new Error("waypoint: admissionCap.perSlot must be > 0");
     }
+    this.lottery = opts.lottery;
+    if (this.lottery) {
+      if (this.lottery.luckyChance <= 0 || this.lottery.luckyChance >= 1) {
+        throw new Error("waypoint: lottery.luckyChance must be in (0, 1)");
+      }
+      const lw = this.lottery.luckyWaitSeconds;
+      if (lw.min < 0 || lw.max < lw.min) {
+        throw new Error("waypoint: lottery.luckyWaitSeconds must satisfy 0 <= min <= max");
+      }
+    }
+    this.luckyCheck = defaultLotteryCheck(opts.secret);
 
-    const ttlSeconds = opts.waitSeconds.max + opts.activeSeconds + GRACE_SECONDS;
+    const maxWait = this.lottery
+      ? Math.max(opts.waitSeconds.max, this.lottery.luckyWaitSeconds.max)
+      : opts.waitSeconds.max;
+    const ttlSeconds = maxWait + opts.activeSeconds + GRACE_SECONDS;
     this.tokens = new Waypass<TUserBindings & { sessionId: string }>({
       secret: opts.secret,
       purpose: opts.purpose ?? "waypoint",
@@ -57,7 +74,10 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
 
   public issueWaiting(bindings: TUserBindings & { sessionId: string }): string {
     const nowSec = Math.floor(Date.now() / 1000);
-    const wait = this.jitter(bindings.sessionId, this.waitSeconds.min, this.waitSeconds.max);
+    const range = this.lottery && this.luckyCheck(bindings.sessionId, this.lottery.luckyChance)
+      ? this.lottery.luckyWaitSeconds
+      : this.waitSeconds;
+    const wait = this.jitter(bindings.sessionId, range.min, range.max);
     const entryAt = nowSec + wait;
     const data: CookieData = { state: "waiting", entryAt };
     return this.tokens.create(bindings, data);
