@@ -20,6 +20,10 @@ export default tseslint.config(
         },
       ],
       "@typescript-eslint/explicit-module-boundary-types": "error",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
       "id-length": [
         "error",
         {
@@ -41,6 +45,21 @@ export default tseslint.config(
     files: ["examples/**/*.ts", "examples/**/*.js"],
     rules: {
       "@typescript-eslint/explicit-module-boundary-types": "off",
+    },
+  },
+  {
+    files: ["examples/akamai/**/*.js"],
+    languageOptions: {
+      globals: {
+        crypto: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
+        btoa: "readonly",
+        atob: "readonly",
+      },
+    },
+    rules: {
+      "@typescript-eslint/explicit-member-accessibility": "off",
     },
   },
 );

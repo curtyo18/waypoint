@@ -49,7 +49,7 @@
   },
   "homepage": "https://github.com/curtyo18/waypoint#readme",
   "dependencies": {
-    "waypass": "github:curtyo18/waypass#a1552247245ed35396dcedf74d1afc79ed8d3e4f"
+    "waypass": "github:curtyo18/waypass#3fb4295772280f4f29cc388902f0fba545b4ca58"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",

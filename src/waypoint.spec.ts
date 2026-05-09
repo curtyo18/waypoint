@@ -27,13 +27,13 @@ function makeRoomWithCap(store: AdmissionStore, perSlot: number, slotSeconds: nu
 
 describe("Waypoint", () => {
   describe("issueWaiting", () => {
-    it("round-trips through verify with state=waiting and entryAt in [now+min, now+max]", () => {
+    it("round-trips through verify with state=waiting and entryAt in [now+min, now+max]", async () => {
       const room = makeRoom();
       const before = Math.floor(Date.now() / 1000);
       const cookie = room.issueWaiting({ sessionId: "s-1", shop: "demo" });
       const after = Math.floor(Date.now() / 1000);
 
-      const verified = room.verify(cookie, { sessionId: "s-1", shop: "demo" });
+      const verified = await room.verify(cookie, { sessionId: "s-1", shop: "demo" });
       expect(verified.ok).toBe(true);
       if (!verified.ok) return;
       expect(verified.state).toBe("waiting");
@@ -44,10 +44,10 @@ describe("Waypoint", () => {
   });
 
   describe("issueActive", () => {
-    it("round-trips through verify with state=active and no entryAt", () => {
+    it("round-trips through verify with state=active and no entryAt", async () => {
       const room = makeRoom();
       const cookie = room.issueActive({ sessionId: "s-1", shop: "demo" });
-      const verified = room.verify(cookie, { sessionId: "s-1", shop: "demo" });
+      const verified = await room.verify(cookie, { sessionId: "s-1", shop: "demo" });
       expect(verified.ok).toBe(true);
       if (!verified.ok) return;
       expect(verified.state).toBe("active");
@@ -123,7 +123,7 @@ describe("Waypoint", () => {
         if (verdict.action !== "admit") return;
         expect(verdict.cookie).not.toBe(waitCookie);
 
-        const verified = room.verify(verdict.cookie, { sessionId: "s-1", shop: "demo" });
+        const verified = await room.verify(verdict.cookie, { sessionId: "s-1", shop: "demo" });
         expect(verified.ok).toBe(true);
         if (!verified.ok) return;
         expect(verified.state).toBe("active");

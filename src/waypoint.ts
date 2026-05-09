@@ -68,11 +68,11 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
     return this.tokens.create(bindings, data);
   }
 
-  public verify(
+  public async verify(
     cookieValue: string,
     bindings: TUserBindings & { sessionId: string },
-  ): VerifyResult {
-    const result = this.tokens.verify(cookieValue, bindings);
+  ): Promise<VerifyResult> {
+    const result = await this.tokens.verify(cookieValue, bindings);
     if (!result.ok) {
       return { ok: false, reason: result.reason };
     }
@@ -95,7 +95,7 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
     // stale cookie": waypass's verify() doesn't expose the payload on the
     // expired path, so we'd be guessing. The kickback action label can be
     // added once that distinction is observable.
-    const verified = cookie === undefined ? undefined : this.verify(cookie, bindings);
+    const verified = cookie === undefined ? undefined : await this.verify(cookie, bindings);
     if (!verified || !verified.ok) {
       return this.freshWait(bindings);
     }
@@ -143,9 +143,9 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
     return { action: "wait", cookie: bumpedCookie, entryAt: nextEntryAt };
   }
 
-  protected freshWait(bindings: TUserBindings & { sessionId: string }): Verdict {
+  protected async freshWait(bindings: TUserBindings & { sessionId: string }): Promise<Verdict> {
     const cookie = this.issueWaiting(bindings);
-    const verified = this.verify(cookie, bindings);
+    const verified = await this.verify(cookie, bindings);
     // Just-issued, our own signature — the only way verify could fail here
     // is a programmer error. Surface it loudly.
     if (!verified.ok || verified.state !== "waiting") {
