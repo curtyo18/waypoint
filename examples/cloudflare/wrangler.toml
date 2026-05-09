@@ -5,6 +5,18 @@ compatibility_date = "2026-04-01"
 # at runtime in Workers.
 compatibility_flags = ["nodejs_compat"]
 
+# The canonical static waiting page. The worker fetches it via env.ASSETS
+# and rewrites the inline ALLOWED_HOSTS so dev redirects to localhost
+# instead of shop.example.com.
+[assets]
+directory = "../../static-page"
+binding = "ASSETS"
+# Always invoke the worker first; the worker fetches assets explicitly via
+# env.ASSETS so it can post-process (e.g. inject ALLOWED_HOSTS for the
+# dev origin into the waiting page). Without this, /index.html would
+# auto-serve and shadow the gate at /.
+run_worker_first = true
+
 [vars]
 WAYPOINT_SECRET = "change-me-in-production"
 
