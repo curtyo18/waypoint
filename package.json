@@ -1,0 +1,68 @@
+{
+  "name": "waypoint",
+  "version": "0.0.1",
+  "description": "Stateless waiting-room library: signed cookies + edge-worker gate + static page",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "static-page",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --passWithNoTests",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepublishOnly": "npm run build && npm test && npm run lint"
+  },
+  "keywords": [
+    "waiting-room",
+    "rate-limit",
+    "edge-worker",
+    "signed-cookies",
+    "splay-buffer",
+    "load-spreading"
+  ],
+  "author": "curtyo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/curtyo18/waypoint.git"
+  },
+  "bugs": {
+    "url": "https://github.com/curtyo18/waypoint/issues"
+  },
+  "homepage": "https://github.com/curtyo18/waypoint#readme",
+  "dependencies": {
+    "waypass": "github:curtyo18/waypass#a1552247245ed35396dcedf74d1afc79ed8d3e4f"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@jest/globals": "^29.7.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.13.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.13.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
