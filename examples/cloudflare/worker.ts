@@ -1,4 +1,4 @@
-import { Waypoint } from "waypoint";
+import { Waypoint, defaultLotteryCheck } from "waypoint";
 import { DurableObjectAdmissionStore } from "./admission-store-do.js";
 import type { AdmissionStoreEnv } from "./admission-store-do.js";
 
@@ -16,10 +16,14 @@ const DEMO_PATH = "/__demo";
 const STATE_PATH = "/__demo/state";
 const RESET_PATH = "/__demo/reset";
 
-const WAIT_SECONDS = { min: 30, max: 120 };
+const WAIT_SECONDS = { min: 10, max: 60 };
 const ACTIVE_SECONDS = 600;
 const ADMISSION_PER_SLOT = 50;
-const SLOT_SECONDS = 10;
+const SLOT_SECONDS = 5;
+// Lottery: 30% lucky chance is high for a demo (production would be 1–5%)
+// so visitors actually see both buckets when clicking around.
+const LOTTERY_CHANCE = 0.3;
+const LUCKY_WAIT_SECONDS = { min: 1, max: 5 };
 
 function readCookie(req: Request, name: string): string | undefined {
   const header = req.headers.get("cookie");
@@ -46,6 +50,10 @@ function makeRoom(env: Env): Waypoint<Record<string, string>> {
     secret: env.WAYPOINT_SECRET,
     waitSeconds: WAIT_SECONDS,
     activeSeconds: ACTIVE_SECONDS,
+    lottery: {
+      luckyChance: LOTTERY_CHANCE,
+      luckyWaitSeconds: LUCKY_WAIT_SECONDS,
+    },
     admissionCap: {
       perSlot: ADMISSION_PER_SLOT,
       slotSeconds: SLOT_SECONDS,
@@ -114,6 +122,8 @@ function demoPanelHtml(): string {
     .pill-fresh { background: #e0e0e0; color: #444; }
     .pill-waiting { background: #fff4d4; color: #6b5400; }
     .pill-active { background: #d4f4dd; color: #0a5d28; }
+    .pill-lucky { background: #d4f4dd; color: #0a5d28; }
+    .pill-unlucky { background: #ffe5e5; color: #861515; }
     .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     button, .btn { background: #1a1a1a; color: #fff; border: 0; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.9rem; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; }
     .btn-secondary { background: #fff; color: #1a1a1a; border: 1px solid #ccc; }
@@ -133,6 +143,7 @@ function demoPanelHtml(): string {
     <h2>Your state</h2>
     <dl class="row">
       <dt>Phase</dt><dd id="phase"><span class="pill pill-fresh">loading</span></dd>
+      <dt>Lottery bucket</dt><dd id="bucket">—</dd>
       <dt>sessionId</dt><dd id="sessionId">—</dd>
       <dt>entryAt</dt><dd id="entryAt">—</dd>
       <dt>Time until / since</dt><dd id="countdown">—</dd>
@@ -151,6 +162,8 @@ function demoPanelHtml(): string {
     <dl class="row">
       <dt>waitSeconds</dt><dd id="cfg-wait">—</dd>
       <dt>activeSeconds</dt><dd id="cfg-active">—</dd>
+      <dt>luckyChance</dt><dd id="cfg-luckychance">—</dd>
+      <dt>luckyWaitSeconds</dt><dd id="cfg-luckywait">—</dd>
       <dt>perSlot</dt><dd id="cfg-perslot">—</dd>
       <dt>slotSeconds</dt><dd id="cfg-slotsec">—</dd>
     </dl>
@@ -181,6 +194,7 @@ function demoPanelHtml(): string {
       const s = await r.json();
 
       document.getElementById("phase").innerHTML = pill(s.phase);
+      document.getElementById("bucket").innerHTML = s.lottery.bucket ? pill(s.lottery.bucket) : "—";
       document.getElementById("sessionId").textContent = s.sessionId || "—";
       document.getElementById("entryAt").textContent = s.entryAt ? new Date(s.entryAt * 1000).toLocaleTimeString() + " (" + s.entryAt + ")" : "—";
       const cd = document.getElementById("countdown");
@@ -197,6 +211,8 @@ function demoPanelHtml(): string {
 
       document.getElementById("cfg-wait").textContent = s.config.waitMin + "..." + s.config.waitMax + " s";
       document.getElementById("cfg-active").textContent = s.config.activeSeconds + " s";
+      document.getElementById("cfg-luckychance").textContent = (s.lottery.chance * 100).toFixed(0) + "%";
+      document.getElementById("cfg-luckywait").textContent = s.lottery.luckyMin + "..." + s.lottery.luckyMax + " s";
       document.getElementById("cfg-perslot").textContent = s.config.perSlot;
       document.getElementById("cfg-slotsec").textContent = s.config.slotSeconds + " s";
 
@@ -288,6 +304,12 @@ async function serveState(request: Request, env: Env): Promise<Response> {
   const phase = decoded.state ?? "fresh";
   const exitAt = phase === "active" ? decoded.exp : undefined;
 
+  // Recompute lottery bucket assignment for this session — pure function,
+  // same inputs as the lib.
+  const lotteryBucket = sessionId
+    ? (defaultLotteryCheck(env.WAYPOINT_SECRET)(sessionId, LOTTERY_CHANCE) ? "lucky" : "unlucky")
+    : null;
+
   return Response.json({
     phase,
     sessionId,
@@ -295,6 +317,12 @@ async function serveState(request: Request, env: Env): Promise<Response> {
     exitAt,
     currentSlot: String(currentSlot),
     slots,
+    lottery: {
+      bucket: lotteryBucket,
+      chance: LOTTERY_CHANCE,
+      luckyMin: LUCKY_WAIT_SECONDS.min,
+      luckyMax: LUCKY_WAIT_SECONDS.max,
+    },
     config: {
       waitMin: WAIT_SECONDS.min,
       waitMax: WAIT_SECONDS.max,
