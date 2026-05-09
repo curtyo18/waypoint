@@ -1,6 +1,8 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { Waypoint } from "./waypoint.js";
 import { defaultJitter } from "./jitter.js";
+import { InMemoryAdmissionStore } from "./in-memory-admission-store.js";
+import type { AdmissionStore } from "./types.js";
 
 const SECRET = "test-secret-please-change";
 
@@ -10,6 +12,16 @@ function makeRoom() {
     waitSeconds: { min: 30, max: 90 },
     activeSeconds: 600,
     purpose: "test",
+  });
+}
+
+function makeRoomWithCap(store: AdmissionStore, perSlot: number, slotSeconds: number, onStoreError?: "open" | "closed") {
+  return new Waypoint<{ shop: string }>({
+    secret: SECRET,
+    waitSeconds: { min: 30, max: 90 },
+    activeSeconds: 600,
+    purpose: "test",
+    admissionCap: { perSlot, slotSeconds, store, onStoreError },
   });
 }
 
@@ -160,6 +172,154 @@ describe("Waypoint", () => {
       expect(verdict.action).toBe("wait");
       if (verdict.action !== "wait") return;
       expect(verdict.cookie).not.toBe(cookie);
+    });
+  });
+
+  describe("admissionCap", () => {
+    it("admits and increments the counter when under cap", async () => {
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        const store = new InMemoryAdmissionStore();
+        const room = makeRoomWithCap(store, 2, 60);
+        const waitCookie = room.issueWaiting({ sessionId: "s-1", shop: "demo" });
+        jest.setSystemTime(new Date(Date.now() + 91 * 1000));
+
+        const verdict = await room.evaluate({
+          cookie: waitCookie,
+          bindings: { sessionId: "s-1", shop: "demo" },
+        });
+        expect(verdict.action).toBe("admit");
+        const slotIdx = Math.floor(Math.floor(Date.now() / 1000) / 60);
+        expect(store.count(String(slotIdx))).toBe(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("bumps to next slot when at cap, leaving counter unchanged", async () => {
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        const store = new InMemoryAdmissionStore();
+        const room = makeRoomWithCap(store, 1, 60);
+        // Pre-fill the slot to its cap.
+        const slotIdx = Math.floor(Math.floor(Date.now() / 1000 + 91) / 60);
+        await store.tryAdmit(String(slotIdx), 1);
+        expect(store.count(String(slotIdx))).toBe(1);
+
+        const waitCookie = room.issueWaiting({ sessionId: "s-1", shop: "demo" });
+        jest.setSystemTime(new Date(Date.now() + 91 * 1000));
+
+        const verdict = await room.evaluate({
+          cookie: waitCookie,
+          bindings: { sessionId: "s-1", shop: "demo" },
+        });
+        expect(verdict.action).toBe("wait");
+        if (verdict.action !== "wait") return;
+        expect(verdict.cookie).not.toBe(waitCookie);
+        expect(verdict.entryAt).toBe((slotIdx + 1) * 60);
+        expect(store.count(String(slotIdx))).toBe(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("uses a separate counter per slot across rollover", async () => {
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        const store = new InMemoryAdmissionStore();
+        const room = makeRoomWithCap(store, 5, 60);
+
+        const cookieA = room.issueWaiting({ sessionId: "s-1", shop: "demo" });
+        jest.setSystemTime(new Date(Date.now() + 91 * 1000));
+        const slotA = String(Math.floor(Math.floor(Date.now() / 1000) / 60));
+        await room.evaluate({
+          cookie: cookieA,
+          bindings: { sessionId: "s-1", shop: "demo" },
+        });
+        expect(store.count(slotA)).toBe(1);
+
+        // Jump ahead a full slot.
+        jest.setSystemTime(new Date(Date.now() + 60 * 1000));
+        const cookieB = room.issueWaiting({ sessionId: "s-2", shop: "demo" });
+        jest.setSystemTime(new Date(Date.now() + 91 * 1000));
+        const slotB = String(Math.floor(Math.floor(Date.now() / 1000) / 60));
+        await room.evaluate({
+          cookie: cookieB,
+          bindings: { sessionId: "s-2", shop: "demo" },
+        });
+        expect(slotB).not.toBe(slotA);
+        expect(store.count(slotB)).toBe(1);
+        expect(store.count(slotA)).toBe(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("fail-open: admits when the store throws", async () => {
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        const store = new InMemoryAdmissionStore();
+        const room = makeRoomWithCap(store, 1, 60);
+
+        const waitCookie = room.issueWaiting({ sessionId: "s-1", shop: "demo" });
+        jest.setSystemTime(new Date(Date.now() + 91 * 1000));
+        const slotIdx = Math.floor(Math.floor(Date.now() / 1000) / 60);
+        store.triggerError(String(slotIdx));
+
+        const verdict = await room.evaluate({
+          cookie: waitCookie,
+          bindings: { sessionId: "s-1", shop: "demo" },
+        });
+        expect(verdict.action).toBe("admit");
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("fail-closed: bumps when the store throws", async () => {
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        const store = new InMemoryAdmissionStore();
+        const room = makeRoomWithCap(store, 1, 60, "closed");
+
+        const waitCookie = room.issueWaiting({ sessionId: "s-1", shop: "demo" });
+        jest.setSystemTime(new Date(Date.now() + 91 * 1000));
+        const slotIdx = Math.floor(Math.floor(Date.now() / 1000) / 60);
+        store.triggerError(String(slotIdx));
+
+        const verdict = await room.evaluate({
+          cookie: waitCookie,
+          bindings: { sessionId: "s-1", shop: "demo" },
+        });
+        expect(verdict.action).toBe("wait");
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("regression: behaviour unchanged when admissionCap is not configured", async () => {
+      // Identical to the basic admit case, repeated here to lock in that
+      // adding the cap option didn't shift the no-cap default.
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        const room = makeRoom();
+        const waitCookie = room.issueWaiting({ sessionId: "s-1", shop: "demo" });
+        jest.setSystemTime(new Date(Date.now() + 91 * 1000));
+
+        const verdict = await room.evaluate({
+          cookie: waitCookie,
+          bindings: { sessionId: "s-1", shop: "demo" },
+        });
+        expect(verdict.action).toBe("admit");
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });

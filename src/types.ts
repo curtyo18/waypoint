@@ -14,6 +14,37 @@ export type WaypointOptions = {
   cookieName?: string;
   cookieDomain?: string;
   cookiePath?: string;
+  admissionCap?: AdmissionCapOptions;
+};
+
+/**
+ * Atomic per-slot counter store for the optional admission cap.
+ *
+ * `tryAdmit(slot, cap)` MUST atomically: read the current count for `slot`,
+ * compare to `cap`, and if under-cap increment-and-return-true; otherwise
+ * return-false-without-incrementing. Two concurrent callers observing the
+ * same `slot` must not both push the underlying counter above `cap` —
+ * that's the contract the admission cap is built on.
+ *
+ * Eventually-consistent stores (multi-region KV, replicated caches) may
+ * overshoot, bounded by their consistency window. That overshoot is the
+ * operator's trade-off, not a waypoint bug; document it and pick `perSlot`
+ * accordingly.
+ */
+export type AdmissionStore = {
+  tryAdmit(slot: string, cap: number): Promise<boolean>;
+};
+
+export type AdmissionCapOptions = {
+  perSlot: number;
+  slotSeconds: number;
+  store: AdmissionStore;
+  /**
+   * What to do if `store.tryAdmit` throws. `"open"` (default) admits the
+   * caller — favours availability. `"closed"` treats the throw as a "full"
+   * answer and bumps the visitor to the next slot — favours the cap.
+   */
+  onStoreError?: "open" | "closed";
 };
 
 export type WaitingState = {

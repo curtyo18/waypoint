@@ -2,6 +2,7 @@ import { Waypass } from "waypass";
 import type { TokenPayload } from "waypass";
 import { defaultJitter } from "./jitter.js";
 import type {
+  AdmissionCapOptions,
   CookieData,
   EvaluateInput,
   JitterFn,
@@ -22,6 +23,7 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
   private readonly waitSeconds: WaitSeconds;
   private readonly activeSeconds: number;
   private readonly jitter: JitterFn;
+  private readonly admissionCap: AdmissionCapOptions | undefined;
 
   constructor(opts: WaypointOptions) {
     if (opts.waitSeconds.min < 0 || opts.waitSeconds.max < opts.waitSeconds.min) {
@@ -37,6 +39,13 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
     this.cookieName = opts.cookieName ?? "waypoint";
     this.cookieDomain = opts.cookieDomain;
     this.cookiePath = opts.cookiePath ?? "/";
+    this.admissionCap = opts.admissionCap;
+    if (this.admissionCap && this.admissionCap.slotSeconds <= 0) {
+      throw new Error("waypoint: admissionCap.slotSeconds must be > 0");
+    }
+    if (this.admissionCap && this.admissionCap.perSlot <= 0) {
+      throw new Error("waypoint: admissionCap.perSlot must be > 0");
+    }
 
     const ttlSeconds = opts.waitSeconds.max + opts.activeSeconds + GRACE_SECONDS;
     this.tokens = new Waypass<TUserBindings & { sessionId: string }>({
@@ -100,7 +109,38 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
       return { action: "wait", cookie: cookie!, entryAt: verified.entryAt };
     }
 
-    return this.admit(bindings);
+    return this.tryAdmitWithCap(bindings, nowSec);
+  }
+
+  protected async tryAdmitWithCap(
+    bindings: TUserBindings & { sessionId: string },
+    nowSec: number,
+  ): Promise<Verdict> {
+    if (!this.admissionCap) {
+      return this.admit(bindings);
+    }
+
+    const { perSlot, slotSeconds, store, onStoreError } = this.admissionCap;
+    const slotIdx = Math.floor(nowSec / slotSeconds);
+    const slot = String(slotIdx);
+
+    let admitted: boolean;
+    try {
+      admitted = await store.tryAdmit(slot, perSlot);
+    } catch (_err) {
+      // Operator picks the failure mode. Default ("open") favours
+      // availability — let people in if the counter store is unhappy.
+      admitted = onStoreError === "closed" ? false : true;
+    }
+
+    if (admitted) {
+      return this.admit(bindings);
+    }
+
+    const nextEntryAt = (slotIdx + 1) * slotSeconds;
+    const data: CookieData = { state: "waiting", entryAt: nextEntryAt };
+    const bumpedCookie = this.tokens.create(bindings, data);
+    return { action: "wait", cookie: bumpedCookie, entryAt: nextEntryAt };
   }
 
   protected freshWait(bindings: TUserBindings & { sessionId: string }): Verdict {
