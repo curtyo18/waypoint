@@ -1,10 +1,6 @@
 import { Waypoint, defaultLotteryCheck } from "waypoint";
-import { DurableObjectAdmissionStore } from "./admission-store-do.js";
-import type { AdmissionStoreEnv } from "./admission-store-do.js";
 
-export { CounterDO } from "./counter-do.js";
-
-type Env = AdmissionStoreEnv & {
+type Env = {
   WAYPOINT_SECRET: string;
   ASSETS: { fetch(req: Request): Promise<Response> };
 };
@@ -18,12 +14,16 @@ const RESET_PATH = "/__demo/reset";
 
 const WAIT_SECONDS = { min: 10, max: 60 };
 const ACTIVE_SECONDS = 600;
-const ADMISSION_PER_SLOT = 50;
-const SLOT_SECONDS = 5;
 // Lottery: 30% lucky chance is high for a demo (production would be 1–5%)
 // so visitors actually see both buckets when clicking around.
 const LOTTERY_CHANCE = 0.3;
 const LUCKY_WAIT_SECONDS = { min: 1, max: 5 };
+
+// Note: the optional admission cap (per-slot rate ceiling backed by a
+// Durable Object) is NOT enabled in this demo. The recommended config is
+// splay buffer + bimodal lottery, which is what runs here. To enable the
+// cap, see the README and the reference files counter-do.ts and
+// admission-store-do.ts.
 
 function readCookie(req: Request, name: string): string | undefined {
   const header = req.headers.get("cookie");
@@ -54,18 +54,10 @@ function makeRoom(env: Env): Waypoint<Record<string, string>> {
       luckyChance: LOTTERY_CHANCE,
       luckyWaitSeconds: LUCKY_WAIT_SECONDS,
     },
-    admissionCap: {
-      perSlot: ADMISSION_PER_SLOT,
-      slotSeconds: SLOT_SECONDS,
-      store: new DurableObjectAdmissionStore(env),
-      onStoreError: "open",
-    },
   });
 }
 
-// The "real site" — the page a successful admission lands on. Renders
-// some friendly copy plus a small status footer pointing back at the
-// demo panel.
+// The "real site" — the page a successful admission lands on.
 function mockOriginHtml(): string {
   return `<!doctype html>
 <html lang="en">
@@ -94,14 +86,14 @@ function mockOriginHtml(): string {
     <p><button>Add to bag</button></p>
   </article>
   <p class="footer">
-    <a href="${DEMO_PATH}">→ open the demo panel</a> to inspect cookie state, the slot counter, and the configured knobs.
+    <a href="${DEMO_PATH}">→ open the demo panel</a> to inspect cookie state and the configured knobs.
   </p>
 </body>
 </html>`;
 }
 
 // Demo control panel. Self-contained HTML; polls /__demo/state for live
-// updates of the cookie state and the per-slot counter.
+// updates of the cookie state and the lottery bucket assignment.
 function demoPanelHtml(): string {
   return `<!doctype html>
 <html lang="en">
@@ -127,17 +119,13 @@ function demoPanelHtml(): string {
     .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     button, .btn { background: #1a1a1a; color: #fff; border: 0; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.9rem; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block; }
     .btn-secondary { background: #fff; color: #1a1a1a; border: 1px solid #ccc; }
-    .slots { font-family: ui-monospace, monospace; font-size: 0.85rem; }
-    .slot-bar { display: inline-block; background: #e0e0e0; height: 0.5rem; vertical-align: middle; margin-left: 0.5rem; border-radius: 2px; overflow: hidden; }
-    .slot-fill { background: #1a1a1a; height: 100%; }
-    .slot-fill.full { background: #c00; }
     .help { color: #666; font-size: 0.85rem; margin-top: 0.5rem; }
     code { background: #eee; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85rem; }
   </style>
 </head>
 <body>
   <h1>waypoint demo panel</h1>
-  <p class="help">Live view of the gate's cookie state and the Durable Object's per-slot admission counters. Polls every second.</p>
+  <p class="help">Live view of the gate's cookie state and the lottery bucket assignment. Polls every second.</p>
 
   <section class="panel">
     <h2>Your state</h2>
@@ -154,7 +142,7 @@ function demoPanelHtml(): string {
       <a class="btn" href="/">→ Visit the gated site (/)</a>
       <a class="btn btn-secondary" href="${RESET_PATH}">Reset cookies (re-roll)</a>
     </div>
-    <p class="help">Open the gated site in another <em>incognito</em> window to act as a parallel user against the same DO counter.</p>
+    <p class="help">Open the gated site in another <em>incognito</em> window to act as a parallel user with a different bucket assignment.</p>
   </section>
 
   <section class="panel">
@@ -164,15 +152,8 @@ function demoPanelHtml(): string {
       <dt>activeSeconds</dt><dd id="cfg-active">—</dd>
       <dt>luckyChance</dt><dd id="cfg-luckychance">—</dd>
       <dt>luckyWaitSeconds</dt><dd id="cfg-luckywait">—</dd>
-      <dt>perSlot</dt><dd id="cfg-perslot">—</dd>
-      <dt>slotSeconds</dt><dd id="cfg-slotsec">—</dd>
     </dl>
-  </section>
-
-  <section class="panel">
-    <h2>Admission cap (live, per slot)</h2>
-    <p class="help">Counters from the Durable Object. Current slot first; recent past in fade. A slot's counter resets implicitly — the next slot is a fresh key.</p>
-    <div class="slots" id="slots">—</div>
+    <p class="help">The optional admission cap (a hard per-slot rate ceiling) is not enabled in this demo. See the README to enable it.</p>
   </section>
 
   <script>
@@ -213,21 +194,6 @@ function demoPanelHtml(): string {
       document.getElementById("cfg-active").textContent = s.config.activeSeconds + " s";
       document.getElementById("cfg-luckychance").textContent = (s.lottery.chance * 100).toFixed(0) + "%";
       document.getElementById("cfg-luckywait").textContent = s.lottery.luckyMin + "..." + s.lottery.luckyMax + " s";
-      document.getElementById("cfg-perslot").textContent = s.config.perSlot;
-      document.getElementById("cfg-slotsec").textContent = s.config.slotSeconds + " s";
-
-      // Render the cap view as a list of recent slots with a bar.
-      const slotsEl = document.getElementById("slots");
-      const rows = s.slots.map(function (sl) {
-        const pct = Math.min(100, Math.round((sl.count / s.config.perSlot) * 100));
-        const cls = sl.count >= s.config.perSlot ? "slot-fill full" : "slot-fill";
-        const dim = sl.id === s.currentSlot ? "" : "color:#999;";
-        return '<div style="' + dim + '">slot ' + sl.id + ': ' + sl.count + '/' + s.config.perSlot +
-          '<span class="slot-bar" style="width:120px"><span class="' + cls + '" style="display:block;width:' + pct + '%;"></span></span>' +
-          (sl.id === s.currentSlot ? "  ← now" : "") +
-          '</div>';
-      }).join("");
-      slotsEl.innerHTML = rows || "—";
     }
 
     poll();
@@ -237,16 +203,11 @@ function demoPanelHtml(): string {
 </html>`;
 }
 
-// Build the inline content of the static waiting page with ALLOWED_HOSTS
-// patched to include the dev origin. The canonical page lives at
-// static-page/index.html and ships with shop.example.com only.
 async function serveWaitingPage(request: Request, env: Env): Promise<Response> {
   const assetReq = new Request(new URL("/index.html", request.url).toString(), { method: "GET" });
   const original = await env.ASSETS.fetch(assetReq);
   let html = await original.text();
   const url = new URL(request.url);
-  // Inject the dev origin into the allowlist so the redirect goes back to
-  // the worker, not the page-origin fallback.
   const injected = JSON.stringify([url.host]);
   html = html.replace(
     /const ALLOWED_HOSTS = \[[^\]]*\];/,
@@ -255,9 +216,6 @@ async function serveWaitingPage(request: Request, env: Env): Promise<Response> {
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
-// Decode the waypoint cookie (without re-verifying — purely for display).
-// The cookie is HMAC-signed; the demo panel doesn't need to re-verify
-// since this endpoint is server-side and trusted.
 function decodeWaypointCookie(value: string | undefined): {
   state?: string;
   entryAt?: number;
@@ -268,7 +226,7 @@ function decodeWaypointCookie(value: string | undefined): {
   const parts = value.split(".");
   if (parts.length !== 3) return {};
   try {
-    const json = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+    const json = atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/"));
     const payload = JSON.parse(json) as {
       iat?: number;
       exp?: number;
@@ -285,27 +243,13 @@ function decodeWaypointCookie(value: string | undefined): {
   }
 }
 
-async function serveState(request: Request, env: Env): Promise<Response> {
+function serveState(request: Request, env: Env): Response {
   const sessionId = readCookie(request, SESSION_COOKIE);
   const decoded = decodeWaypointCookie(readCookie(request, COOKIE_NAME));
-
-  // Compute current + recent slots and ask the DO for their counts.
-  const nowSec = Math.floor(Date.now() / 1000);
-  const currentSlot = Math.floor(nowSec / SLOT_SECONDS);
-  const slotIds = [currentSlot - 2, currentSlot - 1, currentSlot, currentSlot + 1].map(String);
-  const id = env.COUNTER.idFromName("waypoint-admissions");
-  const stub = env.COUNTER.get(id);
-  const peekRes = await stub.fetch(
-    `https://counter/peek?slots=${slotIds.join(",")}`,
-  );
-  const peek = (await peekRes.json()) as { counts: Record<string, number> };
-  const slots = slotIds.map((sId) => ({ id: sId, count: peek.counts[sId] ?? 0 }));
 
   const phase = decoded.state ?? "fresh";
   const exitAt = phase === "active" ? decoded.exp : undefined;
 
-  // Recompute lottery bucket assignment for this session — pure function,
-  // same inputs as the lib.
   const lotteryBucket = sessionId
     ? (defaultLotteryCheck(env.WAYPOINT_SECRET)(sessionId, LOTTERY_CHANCE) ? "lucky" : "unlucky")
     : null;
@@ -315,8 +259,6 @@ async function serveState(request: Request, env: Env): Promise<Response> {
     sessionId,
     entryAt: decoded.entryAt,
     exitAt,
-    currentSlot: String(currentSlot),
-    slots,
     lottery: {
       bucket: lotteryBucket,
       chance: LOTTERY_CHANCE,
@@ -327,8 +269,6 @@ async function serveState(request: Request, env: Env): Promise<Response> {
       waitMin: WAIT_SECONDS.min,
       waitMax: WAIT_SECONDS.max,
       activeSeconds: ACTIVE_SECONDS,
-      perSlot: ADMISSION_PER_SLOT,
-      slotSeconds: SLOT_SECONDS,
     },
   });
 }
@@ -361,8 +301,6 @@ export default {
       return serveWaitingPage(request, env);
     }
 
-    // Everything else hits the gate. The "origin" the gate protects is
-    // the mock product page below.
     let sessionId = readCookie(request, SESSION_COOKIE);
     let setSessionHeader: string | undefined;
     if (!sessionId) {

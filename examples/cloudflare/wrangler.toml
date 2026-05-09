@@ -20,10 +20,15 @@ run_worker_first = true
 [vars]
 WAYPOINT_SECRET = "change-me-in-production"
 
-[[durable_objects.bindings]]
-name = "COUNTER"
-class_name = "CounterDO"
-
-[[migrations]]
-tag = "v1"
-new_classes = ["CounterDO"]
+# The optional admission cap is NOT enabled in this demo. To enable it,
+# uncomment the durable_objects + migrations sections below, restore the
+# admissionCap config + the DurableObjectAdmissionStore import in
+# worker.ts, and re-export CounterDO from worker.ts.
+#
+# [[durable_objects.bindings]]
+# name = "COUNTER"
+# class_name = "CounterDO"
+#
+# [[migrations]]
+# tag = "v1"
+# new_classes = ["CounterDO"]

@@ -1,9 +1,15 @@
 /**
+ * Reference code for the optional admission cap — NOT used by the default
+ * demo. The default demo runs splay buffer + bimodal lottery only.
+ *
  * Durable Object that holds atomic per-slot counters.
  *
  * `tryAdmit` is the only operation: read current count, compare to cap,
  * conditionally increment. The DO's single-threaded execution model gives
  * us atomicity for free — no compare-and-swap dance.
+ *
+ * To enable the cap in this demo, see the README ("Enabling the optional
+ * admission cap").
  */
 export class CounterDO {
   private readonly state: DurableObjectState;

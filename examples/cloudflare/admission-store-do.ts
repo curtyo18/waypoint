@@ -1,6 +1,9 @@
 import type { AdmissionStore } from "waypoint";
 
 /**
+ * Reference code for the optional admission cap — NOT used by the default
+ * demo. The default demo runs splay buffer + bimodal lottery only.
+ *
  * AdmissionStore backed by a Durable Object that owns the per-slot
  * counters. Every Worker isolate routes its `tryAdmit` calls to the same
  * DO instance via a fixed name, so all admissions for a given slot

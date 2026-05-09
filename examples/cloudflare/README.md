@@ -1,8 +1,10 @@
 # waypoint on Cloudflare Workers
 
-A runnable end-to-end demo of waypoint on a Cloudflare Worker, with the
-optional admission cap backed by a Durable Object that holds the
-per-slot counters.
+A runnable end-to-end demo of waypoint on a Cloudflare Worker. The default
+config uses **splay buffer + bimodal lottery** — the recommended mode for
+production use. The optional admission cap is wired in as reference code
+but disabled in the default demo (see "Enabling the optional admission
+cap" below).
 
 One worker serves the whole demo: the gate, a mock product page (the
 "protected origin"), the static waiting page, and a small live demo
@@ -19,18 +21,15 @@ panel.
     back here.
   - `GET /__demo` → control panel HTML.
   - `GET /__demo/state` → JSON snapshot for the panel: cookie phase,
-    sessionId, entryAt/exitAt, current admission counts per slot.
+    sessionId, entryAt/exitAt, lottery bucket, configured knobs.
   - `GET /__demo/reset` → clears both cookies, redirects back to
     `/__demo`.
-- `counter-do.ts` — Durable Object holding `Map<slot, count>`. Two
-  endpoints: `/tryAdmit` (used by the gate) and `/peek` (used by the
-  panel for read-only display).
-- `admission-store-do.ts` — `AdmissionStore` adapter the worker passes
-  to `Waypoint`.
-- `wrangler.toml` — Durable Object binding, `nodejs_compat` flag, and
-  an `[assets]` binding pointing at the canonical static page with
-  `run_worker_first = true` so the worker can post-process before
-  serving.
+- `counter-do.ts` and `admission-store-do.ts` — **reference code for the
+  optional admission cap; not used by the default demo.** See the
+  enable-it section below.
+- `wrangler.toml` — `nodejs_compat` flag and an `[assets]` binding
+  pointing at the canonical static page with `run_worker_first = true`
+  so the worker can post-process before serving.
 
 ## Why `nodejs_compat`?
 
@@ -58,17 +57,17 @@ https://localhost:8787/__demo
   you'll be redirected to the static waiting page; the page counts
   down and forwards back to the worker; when `entryAt` has passed,
   you're admitted to the mock product page.
-- The panel polls `/__demo/state` once a second so you can watch the
-  cookie's `phase` flip from `fresh` → `waiting` → `active`, and see
-  the per-slot counter on the Durable Object increment as you (and
-  any incognito tabs) get admitted.
-- Click **Reset cookies (re-roll)** to wipe state and start over.
-- Open the gate in an *incognito window* to act as a parallel
-  user against the same DO counter — useful for watching the slot
-  fill up.
+- The panel shows your current cookie phase (`fresh` / `waiting` /
+  `active`) and your **lottery bucket** (`lucky` or `unlucky`). With
+  the demo's 30% lucky chance, every ~3rd reset you'll land in the
+  lucky bucket and get a 1–5 second wait instead of 10–60 seconds.
+- Click **Reset cookies (re-roll)** to wipe state and start over with
+  a fresh sessionId — possibly flipping you to the other bucket.
+- Open the gate in an *incognito window* to act as a parallel user
+  with a different session and (likely) a different bucket.
 
-The configured knobs (`waitSeconds`, `activeSeconds`, `perSlot`,
-`slotSeconds`) live near the top of `worker.ts`. Edit and save —
+The configured knobs (`waitSeconds`, `activeSeconds`, `luckyChance`,
+`luckyWaitSeconds`) live near the top of `worker.ts`. Edit and save —
 wrangler hot-reloads.
 
 ## Drive it from curl
@@ -101,6 +100,44 @@ Set `WAYPOINT_SECRET` as a secret rather than the dev value in
 ```sh
 npx wrangler secret put WAYPOINT_SECRET
 ```
+
+## Enabling the optional admission cap
+
+The default demo intentionally omits the admission cap because casual
+demo traffic never approaches the cap, so the visualisation would be
+empty. To enable it for production use (or to play with the cap
+behaviour):
+
+1. **Re-export the Durable Object from `worker.ts`:**
+   ```ts
+   export { CounterDO } from "./counter-do.js";
+   ```
+2. **Re-import the admission store + add it to `Env`:**
+   ```ts
+   import { DurableObjectAdmissionStore } from "./admission-store-do.js";
+   import type { AdmissionStoreEnv } from "./admission-store-do.js";
+
+   type Env = AdmissionStoreEnv & {
+     WAYPOINT_SECRET: string;
+     ASSETS: { fetch(req: Request): Promise<Response> };
+   };
+   ```
+3. **Wire the cap into `makeRoom`:**
+   ```ts
+   admissionCap: {
+     perSlot: 50,
+     slotSeconds: 5,
+     store: new DurableObjectAdmissionStore(env),
+     onStoreError: "open",
+   },
+   ```
+4. **Uncomment the `[[durable_objects.bindings]]` and `[[migrations]]`
+   sections in `wrangler.toml`.**
+
+After those four edits, the cap is active. With the default
+`perSlot: 50, slotSeconds: 5` (10 admissions/sec capacity), bumping
+behaviour is rare under casual usage; drop `perSlot` to 1 or 2 if you
+want to see the cap fire visibly with a few incognito tabs.
 
 ## Smoke test (manual)
 
