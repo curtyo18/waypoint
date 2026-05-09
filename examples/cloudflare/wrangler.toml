@@ -1,0 +1,17 @@
+name = "waypoint-example"
+main = "worker.ts"
+compatibility_date = "2026-04-01"
+# waypass imports `node:crypto` for HMAC; nodejs_compat lets that resolve
+# at runtime in Workers.
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+WAYPOINT_SECRET = "change-me-in-production"
+
+[[durable_objects.bindings]]
+name = "COUNTER"
+class_name = "CounterDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["CounterDO"]
