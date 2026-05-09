@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>You're in line</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: #f5f5f5;
+        color: #1a1a1a;
+        display: grid;
+        place-items: center;
+      }
+      main {
+        background: #ffffff;
+        padding: 2.5rem 3rem;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08);
+        max-width: 28rem;
+        text-align: center;
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        font-weight: 600;
+      }
+      p {
+        margin: 0 0 1.5rem;
+        color: #555;
+        line-height: 1.5;
+      }
+      .countdown {
+        font-variant-numeric: tabular-nums;
+        font-size: 2.5rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      noscript {
+        display: block;
+        margin-top: 1rem;
+        color: #b00020;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>You're in line</h1>
+      <p>We're letting people in a few at a time so the site stays fast for everyone. We'll send you through automatically when it's your turn.</p>
+      <div class="countdown" id="countdown">--</div>
+      <noscript>This page needs JavaScript to count down and forward you. Please enable it.</noscript>
+    </main>
+    <script>
+      // Edit this for your deployment: list every host that legitimate
+      // returnTo URLs may point at. Anything else falls back to "/" on
+      // the page's own origin to neutralise open-redirect phishing.
+      const ALLOWED_HOSTS = ["shop.example.com"];
+
+      const params = new URLSearchParams(location.search);
+      const rawReturn = params.get("returnTo") || "/";
+      const rawT = params.get("t") || "0";
+
+      function safeReturnUrl(input) {
+        try {
+          const url = new URL(input, location.origin);
+          if (ALLOWED_HOSTS.includes(url.host)) {
+            return url.toString();
+          }
+        } catch (_) {
+          // Fall through to safe default.
+        }
+        return new URL("/", location.origin).toString();
+      }
+
+      const target = safeReturnUrl(rawReturn);
+      const entryAt = parseInt(rawT, 10) * 1000;
+      const countdownEl = document.getElementById("countdown");
+
+      function format(ms) {
+        const totalSec = Math.max(0, Math.ceil(ms / 1000));
+        const minutes = Math.floor(totalSec / 60);
+        const seconds = totalSec % 60;
+        return minutes + "m " + seconds + "s";
+      }
+
+      function tick() {
+        const remaining = entryAt - Date.now();
+        if (!isFinite(entryAt) || remaining <= 0) {
+          if (handle) clearInterval(handle);
+          location.href = target;
+          return;
+        }
+        countdownEl.textContent = format(remaining);
+      }
+
+      const handle = setInterval(tick, 1000);
+      tick();
+    </script>
+  </body>
+</html>
