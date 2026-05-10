@@ -84,7 +84,8 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
   }
 
   public issueActive(bindings: TUserBindings & { sessionId: string }): string {
-    const data: CookieData = { state: "active" };
+    const nowSec = Math.floor(Date.now() / 1000);
+    const data: CookieData = { state: "active", exitAt: nowSec + this.activeSeconds };
     return this.tokens.create(bindings, data);
   }
 
@@ -101,9 +102,15 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
       return { ok: false, reason: "malformed" };
     }
     if (data.state === "waiting") {
+      if (typeof data.entryAt !== "number") {
+        return { ok: false, reason: "malformed" };
+      }
       return { ok: true, state: "waiting", entryAt: data.entryAt };
     }
-    return { ok: true, state: "active" };
+    if (typeof data.exitAt !== "number") {
+      return { ok: false, reason: "malformed" };
+    }
+    return { ok: true, state: "active", exitAt: data.exitAt };
   }
 
   public async evaluate(input: EvaluateInput<TUserBindings>): Promise<Verdict> {
@@ -120,11 +127,18 @@ export class Waypoint<TUserBindings extends Record<string, string> = Record<stri
       return this.freshWait(bindings);
     }
 
+    const nowSec = Math.floor(Date.now() / 1000);
+
     if (verified.state === "active") {
-      return { action: "pass" };
+      // The underlying waypass token's exp may exceed exitAt because waypass
+      // is constructed with a single ttlSeconds covering both the wait and
+      // active windows. The active-state contract is `exitAt`; honour it.
+      if (nowSec < verified.exitAt) {
+        return { action: "pass" };
+      }
+      return this.freshWait(bindings);
     }
 
-    const nowSec = Math.floor(Date.now() / 1000);
     if (nowSec < verified.entryAt) {
       return { action: "wait", cookie: cookie!, entryAt: verified.entryAt };
     }

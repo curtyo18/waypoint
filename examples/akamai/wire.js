@@ -3,16 +3,15 @@
  *
  * Akamai EdgeWorker has no Node.js compatibility shim, so we cannot import
  * waypass directly. This file mirrors the wire format byte-for-byte using
- * SubtleCrypto so a token issued here would parse the same way as one
- * issued by waypass v0.0.2.
+ * SubtleCrypto so a token issued here would verify against waypass v0.0.2.
  *
  * Format: `v1.<base64url-payload>.<base64url-sig>`
  *   - payload is JSON: { version, purpose, bindings, data?, iat, exp, jti }
  *   - bindings keys are sorted lexicographically before signing — same
  *     canonicalisation as waypass.
- *   - sig is HMAC-SHA256(secret, "v1." + base64url(payload)) — the prefix
- *     is part of the signed input so a token can't be downgraded by
- *     swapping versions.
+ *   - sig is HMAC-SHA256(secret, base64url(payload)) — matches waypass
+ *     exactly. (The version tag is part of the wire format prefix but NOT
+ *     part of the signed input, mirroring waypass.)
  */
 
 const TEXT_ENC = new TextEncoder();
@@ -98,11 +97,12 @@ export async function create(bindings, data, secret, ttlSeconds, purpose) {
   if (data !== undefined) canon.data = data;
   const payloadJson = JSON.stringify(canon);
   const payloadB64 = base64UrlEncode(TEXT_ENC.encode(payloadJson));
-  const signingInput = `${VERSION_TAG}.${payloadB64}`;
+  // waypass signs only the base64-encoded payload — NOT the version tag.
+  // Diverging here would silently break cross-verify with waypass.
   const key = await importKey(secret);
-  const sig = await crypto.subtle.sign("HMAC", key, TEXT_ENC.encode(signingInput));
+  const sig = await crypto.subtle.sign("HMAC", key, TEXT_ENC.encode(payloadB64));
   const sigB64 = base64UrlEncode(new Uint8Array(sig));
-  return `${signingInput}.${sigB64}`;
+  return `${VERSION_TAG}.${payloadB64}.${sigB64}`;
 }
 
 export async function verify(cookie, bindings, secret, purpose) {
@@ -112,10 +112,10 @@ export async function verify(cookie, bindings, secret, purpose) {
     return { ok: false, reason: "malformed" };
   }
   const [, payloadB64, sigB64] = parts;
-  const signingInput = `${VERSION_TAG}.${payloadB64}`;
 
   const key = await importKey(secret);
-  const expected = await crypto.subtle.sign("HMAC", key, TEXT_ENC.encode(signingInput));
+  // Sign just the payload — same as waypass.
+  const expected = await crypto.subtle.sign("HMAC", key, TEXT_ENC.encode(payloadB64));
   const expectedBytes = new Uint8Array(expected);
   let presented;
   try {

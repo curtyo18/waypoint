@@ -44,13 +44,44 @@ describe("Waypoint", () => {
   });
 
   describe("issueActive", () => {
-    it("round-trips through verify with state=active and no entryAt", async () => {
+    it("round-trips through verify with state=active and exitAt = iat + activeSeconds", async () => {
       const room = makeRoom();
+      const before = Math.floor(Date.now() / 1000);
       const cookie = room.issueActive({ sessionId: "s-1", shop: "demo" });
+      const after = Math.floor(Date.now() / 1000);
+
       const verified = await room.verify(cookie, { sessionId: "s-1", shop: "demo" });
       expect(verified.ok).toBe(true);
       if (!verified.ok) return;
       expect(verified.state).toBe("active");
+      if (verified.state !== "active") return;
+      // activeSeconds = 600 in the test config
+      expect(verified.exitAt).toBeGreaterThanOrEqual(before + 600);
+      expect(verified.exitAt).toBeLessThanOrEqual(after + 600);
+    });
+
+    it("evaluate returns wait once an active cookie is past its exitAt", async () => {
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+        const room = makeRoom();
+        const activeCookie = room.issueActive({ sessionId: "s-1", shop: "demo" });
+
+        // Step past activeSeconds (600) but well within waypass's underlying
+        // ttlSeconds (waitMax + activeSeconds + GRACE = 750). Without the
+        // exitAt enforcement this would still verify and return pass.
+        jest.setSystemTime(new Date(Date.now() + 601 * 1000));
+
+        const verdict = await room.evaluate({
+          cookie: activeCookie,
+          bindings: { sessionId: "s-1", shop: "demo" },
+        });
+        expect(verdict.action).toBe("wait");
+        if (verdict.action !== "wait") return;
+        expect(verdict.cookie).not.toBe(activeCookie);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 

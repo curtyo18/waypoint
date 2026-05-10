@@ -219,8 +219,7 @@ async function serveWaitingPage(request: Request, env: Env): Promise<Response> {
 function decodeWaypointCookie(value: string | undefined): {
   state?: string;
   entryAt?: number;
-  iat?: number;
-  exp?: number;
+  exitAt?: number;
 } {
   if (!value) return {};
   const parts = value.split(".");
@@ -228,15 +227,12 @@ function decodeWaypointCookie(value: string | undefined): {
   try {
     const json = atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/"));
     const payload = JSON.parse(json) as {
-      iat?: number;
-      exp?: number;
-      data?: { state?: string; entryAt?: number };
+      data?: { state?: string; entryAt?: number; exitAt?: number };
     };
     return {
       state: payload.data?.state,
       entryAt: payload.data?.entryAt,
-      iat: payload.iat,
-      exp: payload.exp,
+      exitAt: payload.data?.exitAt,
     };
   } catch {
     return {};
@@ -248,7 +244,7 @@ function serveState(request: Request, env: Env): Response {
   const decoded = decodeWaypointCookie(readCookie(request, COOKIE_NAME));
 
   const phase = decoded.state ?? "fresh";
-  const exitAt = phase === "active" ? decoded.exp : undefined;
+  const exitAt = phase === "active" ? decoded.exitAt : undefined;
 
   const lotteryBucket = sessionId
     ? (defaultLotteryCheck(env.WAYPOINT_SECRET)(sessionId, LOTTERY_CHANCE) ? "lucky" : "unlucky")

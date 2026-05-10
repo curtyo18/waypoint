@@ -12,6 +12,7 @@ export type {
   LotteryOptions,
   PassVerdict,
   Verdict,
+  VerifyReason,
   VerifyResult,
   WaitSeconds,
   WaitVerdict,

@@ -82,14 +82,31 @@ export type WaitingState = {
 
 export type ActiveState = {
   state: "active";
+  /** Unix timestamp (seconds) at which the active session ends. The cookie's
+   *  underlying waypass `exp` is sized to cover the maximum possible cookie
+   *  lifetime; `exitAt` enforces the configured `activeSeconds` cleanly. */
+  exitAt: number;
 };
 
 export type CookieData = WaitingState | ActiveState;
 
+/**
+ * Reasons `verify` can return on failure. Same vocabulary as waypass's
+ * `VerifyReason` plus the `malformed` case for when the cookie's `data`
+ * field doesn't match the expected `CookieData` shape.
+ */
+export type VerifyReason =
+  | "malformed"
+  | "bad_signature"
+  | "expired"
+  | "purpose_mismatch"
+  | "bindings_mismatch"
+  | "replayed";
+
 export type VerifyResult =
   | { ok: true; state: "waiting"; entryAt: number }
-  | { ok: true; state: "active" }
-  | { ok: false; reason: string };
+  | { ok: true; state: "active"; exitAt: number }
+  | { ok: false; reason: VerifyReason };
 
 export type WaitVerdict = {
   action: "wait";
