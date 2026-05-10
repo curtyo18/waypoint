@@ -8,11 +8,13 @@ You'd reach for waypoint when you have a known traffic spike (a sale, a ticket d
 
 ## See it in action
 
-The Cloudflare example bundles a live demo panel that visualises the cookie state, lottery bucket assignment, and countdown:
+The Cloudflare example bundles a live demo panel that visualises the cookie state, lottery bucket assignment, and countdown.
+
+![waypoint demo walkthrough](./docs/demo.gif)
+
+The panel itself, in detail:
 
 ![waypoint demo panel](./docs/demo-panel.png)
-
-[**→ Recorded walkthrough**](https://gyazo.com/dd546747c9d0b9fd33c4329bd2d41247.mp4) — first visit, splay buffer wait, lottery bucket assigned, countdown to admission, active session.
 
 Run it locally:
 
