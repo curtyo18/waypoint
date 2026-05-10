@@ -6,6 +6,22 @@ waypoint smooths a thundering-herd arrival into a steady stream by handing each 
 
 You'd reach for waypoint when you have a known traffic spike (a sale, a ticket drop, an embargo lift) and want to bound concurrent arrivals at the origin without standing up queue infrastructure.
 
+## See it in action
+
+The Cloudflare example bundles a live demo panel that visualises the cookie state, lottery bucket assignment, and countdown:
+
+![waypoint demo panel](./docs/demo-panel.png)
+
+[**→ Recorded walkthrough**](https://gyazo.com/dd546747c9d0b9fd33c4329bd2d41247.mp4) — first visit, splay buffer wait, lottery bucket assigned, countdown to admission, active session.
+
+Run it locally:
+
+```sh
+cd examples/cloudflare
+npx wrangler dev --port 8787 --local-protocol https
+# then open https://localhost:8787/__demo
+```
+
 ## Quick start
 
 ```ts
