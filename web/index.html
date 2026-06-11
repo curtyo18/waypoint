@@ -3,189 +3,101 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>waypoint — live waiting-room demo</title>
+    <title>waypoint — live demo panel</title>
     <style>
-      /* Card + countdown styling is lifted from the library's shipped
-         static-page/index.html so this demo IS the real waiting page,
-         driven by a live Waypoint.evaluate() instead of an edge worker. */
-      :root {
-        color-scheme: light dark;
-      }
-      html,
+      /* Styling mirrors the library's Cloudflare example demo panel
+         (examples/cloudflare/worker.ts) and the shipped static-page, so this
+         is the same experience — but driven by a live Waypoint.evaluate() in
+         the browser instead of a server-side worker. No backend. */
+      :root { color-scheme: light dark; }
       body {
-        min-height: 100%;
-        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        max-width: 52rem; margin: 2rem auto; padding: 0 1rem;
+        line-height: 1.5; color: #1a1a1a; background: #f5f5f5;
       }
-      body {
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        background: #f5f5f5;
-        color: #1a1a1a;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1.25rem;
-        padding: 2rem 1rem 3rem;
-        box-sizing: border-box;
-      }
-      main {
-        background: #ffffff;
-        padding: 2.5rem 3rem;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08);
-        max-width: 30rem;
-        width: 100%;
-        box-sizing: border-box;
-        text-align: center;
-      }
-      h1 {
-        margin: 0 0 0.5rem;
-        font-size: 1.75rem;
-        font-weight: 600;
-      }
-      p {
-        margin: 0 0 1.5rem;
-        color: #555;
-        line-height: 1.5;
-      }
-      code {
-        font: 0.85em ui-monospace, SFMono-Regular, Menlo, monospace;
-        background: rgba(0, 0, 0, 0.06);
-        padding: 0.1em 0.35em;
-        border-radius: 4px;
-      }
-      .countdown {
-        font-variant-numeric: tabular-nums;
-        font-size: 2.5rem;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        margin-bottom: 1rem;
-      }
-      .verdict {
-        font: 0.8rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
-        color: #8a8a8a;
-        margin: 0;
-      }
-      button {
-        font: inherit;
-        font-weight: 600;
-        background: #1a1a1a;
-        color: #fff;
-        border: 0;
-        border-radius: 8px;
-        padding: 0.65rem 1.4rem;
-        cursor: pointer;
-      }
-      button.secondary {
-        background: #e4e4e4;
-        color: #1a1a1a;
-      }
-      /* Secondary "behind the scenes" panel for the admission cap. */
-      .panel {
-        max-width: 30rem;
-        width: 100%;
-        box-sizing: border-box;
-        background: #ffffff;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-        padding: 1.5rem 1.75rem;
-      }
-      .panel h2 {
-        margin: 0 0 0.35rem;
-        font-size: 1.05rem;
-      }
-      .panel p.lead {
-        margin: 0 0 1rem;
-        font-size: 0.9rem;
-      }
-      .row {
-        display: flex;
-        gap: 0.75rem;
-        align-items: flex-end;
-        flex-wrap: wrap;
-        margin-bottom: 1rem;
-      }
-      .row label {
-        font-size: 0.75rem;
-        color: #777;
-        display: block;
-        margin-bottom: 0.2rem;
-      }
-      .row input {
-        width: 4.5rem;
-        font: inherit;
-        padding: 0.35rem 0.5rem;
-        border: 1px solid #d0d0d0;
-        border-radius: 6px;
-        background: #fafafa;
-        color: #1a1a1a;
-      }
-      pre {
-        font: 0.82rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-        background: #f6f6f6;
-        border: 1px solid #ececec;
-        border-radius: 8px;
-        padding: 0.8rem;
-        margin: 0;
-        white-space: pre-wrap;
-        text-align: left;
-      }
-      .tag {
-        display: inline-block;
-        font: 0.7rem/1 ui-monospace, monospace;
-        color: #777;
-        margin-bottom: 1.25rem;
-      }
-      [hidden] { display: none !important; }
+      h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+      h2 { margin: 1.5rem 0 0.5rem; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; color: #666; }
+      .panel { background: #fff; padding: 1.5rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 1rem; }
+      .row { display: grid; grid-template-columns: 9rem 1fr; gap: 0.5rem 1rem; align-items: baseline; margin: 0; }
+      .row dt { color: #666; font-size: 0.9rem; }
+      .row dd { margin: 0; font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace; font-size: 0.9rem; word-break: break-all; }
+      .pill { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.85rem; font-weight: 600; }
+      .pill-fresh { background: #e0e0e0; color: #444; }
+      .pill-waiting { background: #fff4d4; color: #6b5400; }
+      .pill-active { background: #d4f4dd; color: #0a5d28; }
+      .pill-lucky { background: #d4f4dd; color: #0a5d28; }
+      .pill-unlucky { background: #ffe5e5; color: #861515; }
+      .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+      button, .btn { background: #1a1a1a; color: #fff; border: 0; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
+      .btn-secondary { background: #fff; color: #1a1a1a; border: 1px solid #ccc; }
+      .help { color: #666; font-size: 0.85rem; margin-top: 0.5rem; }
+      .row input { width: 4rem; font: inherit; padding: 0.3rem 0.45rem; border: 1px solid #d0d0d0; border-radius: 6px; }
+      code { background: #eee; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85rem; }
+      pre { font: 0.82rem/1.5 ui-monospace, Menlo, monospace; background: #f6f6f6; border: 1px solid #ececec; border-radius: 8px; padding: 0.8rem; margin: 0.5rem 0 0; white-space: pre-wrap; }
+
+      /* The "site view": the visitor-facing waiting page / shop, rendered into
+         #siteView. Reuses the static-page card + a mock-origin shop card. */
+      .site { text-align: center; padding: 1.5rem 1rem; border-radius: 10px; background: #fafafa; border: 1px solid #eee; }
+      .site h3 { margin: 0 0 0.4rem; font-size: 1.4rem; }
+      .site p { color: #555; margin: 0 0 1rem; }
+      .countdown { font-variant-numeric: tabular-nums; font-size: 2.25rem; font-weight: 600; }
+      .badge { display: inline-block; background: #d4f4dd; color: #0a5d28; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; }
+      .price { font-size: 1.4rem; font-weight: 600; margin: 0.3rem 0 1rem; }
     </style>
   </head>
   <body>
-    <main>
-      <div class="tag">waypoint · live in-browser demo · no backend</div>
+    <h1>waypoint demo panel</h1>
+    <p class="help">
+      A live view of the gate's cookie state and lottery-bucket assignment —
+      the same panel as the library's Cloudflare example, but the gate runs as a
+      <code>Waypoint.evaluate()</code> right here in your browser. Updates every second.
+    </p>
 
-      <div id="intro">
-        <h1>Take a seat in the queue</h1>
-        <p>
-          Below is waypoint's real waiting-room page, running on a live
-          <code>Waypoint.evaluate()</code> in your browser. A signed cookie holds
-          your place; the gate sends you through when your wait elapses.
-        </p>
-        <button id="join">Join the queue</button>
+    <section class="panel">
+      <h2>The gated site</h2>
+      <div class="site" id="siteView">
+        <p>You haven't entered yet.</p>
+        <p class="help">Click <strong>Visit the gated site</strong> to hit the gate.</p>
       </div>
+      <div class="actions">
+        <button id="visit">Visit the gated site (/)</button>
+        <button id="reset" class="btn-secondary">Reset cookies (re-roll)</button>
+      </div>
+      <p class="help">Re-roll for a new <code>sessionId</code> — and a fresh lottery bucket. Lucky sessions wait seconds; unlucky ones wait the full window.</p>
+    </section>
 
-      <!-- Mirrors the shipped static-page/index.html waiting view. -->
-      <div id="waiting" hidden>
-        <h1>You're in line</h1>
-        <p>
-          We're letting people in a few at a time so the site stays fast for
-          everyone. We'll send you through automatically when it's your turn.
-        </p>
-        <div class="countdown" id="countdown">--</div>
-        <p class="verdict" id="wverdict"></p>
-      </div>
+    <section class="panel">
+      <h2>Your state</h2>
+      <dl class="row">
+        <dt>Phase</dt><dd id="phase"><span class="pill pill-fresh">fresh</span></dd>
+        <dt>Lottery bucket</dt><dd id="bucket">—</dd>
+        <dt>sessionId</dt><dd id="sessionId">—</dd>
+        <dt>entryAt</dt><dd id="entryAt">—</dd>
+        <dt>Time until / since</dt><dd id="countdown">—</dd>
+        <dt>Active expires</dt><dd id="activeExp">—</dd>
+      </dl>
+    </section>
 
-      <div id="admitted" hidden>
-        <h1>You're through&nbsp;✓</h1>
-        <p>
-          Admitted — a real deployment would forward you to the site now. Your
-          signed cookie keeps you in for the active window without re-queuing.
-        </p>
-        <button id="again" class="secondary">Join again</button>
-      </div>
-    </main>
+    <section class="panel">
+      <h2>Configuration</h2>
+      <dl class="row">
+        <dt>waitSeconds</dt><dd id="cfg-wait">—</dd>
+        <dt>activeSeconds</dt><dd id="cfg-active">—</dd>
+        <dt>luckyChance</dt><dd id="cfg-luckychance">—</dd>
+        <dt>luckyWaitSeconds</dt><dd id="cfg-luckywait">—</dd>
+      </dl>
+      <p class="help">The optional admission cap (a hard per-slot rate ceiling) is shown separately below.</p>
+    </section>
 
     <section class="panel">
       <h2>Admission cap — load spreading</h2>
-      <p class="lead">
-        With an admission cap, only <em>perSlot</em> visitors are let in per time
-        slot; everyone else is bumped to the next slot. Simulate a rush of
-        visitors hitting the gate at once:
-      </p>
-      <div class="row">
-        <div><label for="perSlot">perSlot</label><input id="perSlot" value="2" /></div>
-        <div><label for="slot">slotSeconds</label><input id="slot" value="4" /></div>
-        <div><label for="visitors">visitors</label><input id="visitors" value="6" /></div>
-        <button id="rush">Simulate a rush</button>
-      </div>
+      <p class="help">A separate scenario: with an admission cap, only <em>perSlot</em> visitors are let in per slot; the rest are bumped to the next slot. Simulate a rush:</p>
+      <dl class="row" style="grid-template-columns: 9rem 6rem; margin-top: 0.75rem;">
+        <dt>perSlot</dt><dd><input id="perSlot" value="2" /></dd>
+        <dt>slotSeconds</dt><dd><input id="slot" value="4" /></dd>
+        <dt>visitors</dt><dd><input id="visitors" value="6" /></dd>
+      </dl>
+      <div class="actions"><button id="rush">Simulate a rush</button></div>
       <pre id="cap">—</pre>
     </section>
 
