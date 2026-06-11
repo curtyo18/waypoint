@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>waypoint — waiting-room playground</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #0d1117; color: #e6edf3;
+        font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2rem; }
+      h1 { font-size: 1.3rem; } label { display: block; margin: .5rem 0 .15rem; color: #9aa7b4; }
+      input { width: 100%; box-sizing: border-box; background: #161b22;
+        color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: .4rem .6rem; }
+      button { margin: .3rem .3rem 0 0; background: #238636; color: #fff; border: 0;
+        border-radius: 6px; padding: .45rem .8rem; cursor: pointer; }
+      button.alt { background: #30363d; }
+      pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+        padding: .7rem; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+      .grid { max-width: 760px; }
+    </style>
+  </head>
+  <body>
+    <div class="grid">
+      <h1>waypoint playground</h1>
+      <p>Stateless waiting-room: a signed cookie holds your place; the gate admits you when your wait elapses. Runs entirely in your browser.</p>
+      <label>waitSeconds.min</label><input id="wmin" value="3" />
+      <label>waitSeconds.max</label><input id="wmax" value="8" />
+      <label>activeSeconds</label><input id="active" value="6" />
+      <button id="enter">Enter the queue</button>
+      <button id="reset" class="alt">Reset</button>
+      <label>status</label><pre id="status">idle</pre>
+      <h1 style="font-size:1.05rem;margin-top:1.4rem">Admission cap (load spreading)</h1>
+      <label>perSlot</label><input id="perSlot" value="2" />
+      <label>slotSeconds</label><input id="slot" value="4" />
+      <label>visitors</label><input id="visitors" value="6" />
+      <button id="rush">Simulate a rush</button>
+      <label>cap result</label><pre id="cap">—</pre>
+    </div>
+    <script type="module" src="./demo.js"></script>
+  </body>
+</html>

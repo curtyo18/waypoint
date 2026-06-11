@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["web/**/*", "src/**/*"],
+  "exclude": ["node_modules", "dist", "web/dist", "src/**/*.spec.ts", "web/shims/buffer.ts"]
+}
