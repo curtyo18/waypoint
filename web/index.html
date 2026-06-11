@@ -3,39 +3,192 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>waypoint — waiting-room playground</title>
+    <title>waypoint — live waiting-room demo</title>
     <style>
-      :root { color-scheme: dark; }
-      body { margin: 0; background: #0d1117; color: #e6edf3;
-        font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 2rem; }
-      h1 { font-size: 1.3rem; } label { display: block; margin: .5rem 0 .15rem; color: #9aa7b4; }
-      input { width: 100%; box-sizing: border-box; background: #161b22;
-        color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: .4rem .6rem; }
-      button { margin: .3rem .3rem 0 0; background: #238636; color: #fff; border: 0;
-        border-radius: 6px; padding: .45rem .8rem; cursor: pointer; }
-      button.alt { background: #30363d; }
-      pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px;
-        padding: .7rem; overflow: auto; white-space: pre-wrap; word-break: break-all; }
-      .grid { max-width: 760px; }
+      /* Card + countdown styling is lifted from the library's shipped
+         static-page/index.html so this demo IS the real waiting page,
+         driven by a live Waypoint.evaluate() instead of an edge worker. */
+      :root {
+        color-scheme: light dark;
+      }
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+      }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: #f5f5f5;
+        color: #1a1a1a;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.25rem;
+        padding: 2rem 1rem 3rem;
+        box-sizing: border-box;
+      }
+      main {
+        background: #ffffff;
+        padding: 2.5rem 3rem;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08);
+        max-width: 30rem;
+        width: 100%;
+        box-sizing: border-box;
+        text-align: center;
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.75rem;
+        font-weight: 600;
+      }
+      p {
+        margin: 0 0 1.5rem;
+        color: #555;
+        line-height: 1.5;
+      }
+      code {
+        font: 0.85em ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: rgba(0, 0, 0, 0.06);
+        padding: 0.1em 0.35em;
+        border-radius: 4px;
+      }
+      .countdown {
+        font-variant-numeric: tabular-nums;
+        font-size: 2.5rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        margin-bottom: 1rem;
+      }
+      .verdict {
+        font: 0.8rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: #8a8a8a;
+        margin: 0;
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        background: #1a1a1a;
+        color: #fff;
+        border: 0;
+        border-radius: 8px;
+        padding: 0.65rem 1.4rem;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #e4e4e4;
+        color: #1a1a1a;
+      }
+      /* Secondary "behind the scenes" panel for the admission cap. */
+      .panel {
+        max-width: 30rem;
+        width: 100%;
+        box-sizing: border-box;
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        padding: 1.5rem 1.75rem;
+      }
+      .panel h2 {
+        margin: 0 0 0.35rem;
+        font-size: 1.05rem;
+      }
+      .panel p.lead {
+        margin: 0 0 1rem;
+        font-size: 0.9rem;
+      }
+      .row {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-end;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+      }
+      .row label {
+        font-size: 0.75rem;
+        color: #777;
+        display: block;
+        margin-bottom: 0.2rem;
+      }
+      .row input {
+        width: 4.5rem;
+        font: inherit;
+        padding: 0.35rem 0.5rem;
+        border: 1px solid #d0d0d0;
+        border-radius: 6px;
+        background: #fafafa;
+        color: #1a1a1a;
+      }
+      pre {
+        font: 0.82rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: #f6f6f6;
+        border: 1px solid #ececec;
+        border-radius: 8px;
+        padding: 0.8rem;
+        margin: 0;
+        white-space: pre-wrap;
+        text-align: left;
+      }
+      .tag {
+        display: inline-block;
+        font: 0.7rem/1 ui-monospace, monospace;
+        color: #777;
+        margin-bottom: 1.25rem;
+      }
+      [hidden] { display: none !important; }
     </style>
   </head>
   <body>
-    <div class="grid">
-      <h1>waypoint playground</h1>
-      <p>Stateless waiting-room: a signed cookie holds your place; the gate admits you when your wait elapses. Runs entirely in your browser.</p>
-      <label>waitSeconds.min</label><input id="wmin" value="3" />
-      <label>waitSeconds.max</label><input id="wmax" value="8" />
-      <label>activeSeconds</label><input id="active" value="6" />
-      <button id="enter">Enter the queue</button>
-      <button id="reset" class="alt">Reset</button>
-      <label>status</label><pre id="status">idle</pre>
-      <h1 style="font-size:1.05rem;margin-top:1.4rem">Admission cap (load spreading)</h1>
-      <label>perSlot</label><input id="perSlot" value="2" />
-      <label>slotSeconds</label><input id="slot" value="4" />
-      <label>visitors</label><input id="visitors" value="6" />
-      <button id="rush">Simulate a rush</button>
-      <label>cap result</label><pre id="cap">—</pre>
-    </div>
+    <main>
+      <div class="tag">waypoint · live in-browser demo · no backend</div>
+
+      <div id="intro">
+        <h1>Take a seat in the queue</h1>
+        <p>
+          Below is waypoint's real waiting-room page, running on a live
+          <code>Waypoint.evaluate()</code> in your browser. A signed cookie holds
+          your place; the gate sends you through when your wait elapses.
+        </p>
+        <button id="join">Join the queue</button>
+      </div>
+
+      <!-- Mirrors the shipped static-page/index.html waiting view. -->
+      <div id="waiting" hidden>
+        <h1>You're in line</h1>
+        <p>
+          We're letting people in a few at a time so the site stays fast for
+          everyone. We'll send you through automatically when it's your turn.
+        </p>
+        <div class="countdown" id="countdown">--</div>
+        <p class="verdict" id="wverdict"></p>
+      </div>
+
+      <div id="admitted" hidden>
+        <h1>You're through&nbsp;✓</h1>
+        <p>
+          Admitted — a real deployment would forward you to the site now. Your
+          signed cookie keeps you in for the active window without re-queuing.
+        </p>
+        <button id="again" class="secondary">Join again</button>
+      </div>
+    </main>
+
+    <section class="panel">
+      <h2>Admission cap — load spreading</h2>
+      <p class="lead">
+        With an admission cap, only <em>perSlot</em> visitors are let in per time
+        slot; everyone else is bumped to the next slot. Simulate a rush of
+        visitors hitting the gate at once:
+      </p>
+      <div class="row">
+        <div><label for="perSlot">perSlot</label><input id="perSlot" value="2" /></div>
+        <div><label for="slot">slotSeconds</label><input id="slot" value="4" /></div>
+        <div><label for="visitors">visitors</label><input id="visitors" value="6" /></div>
+        <button id="rush">Simulate a rush</button>
+      </div>
+      <pre id="cap">—</pre>
+    </section>
+
     <script type="module" src="./demo.js"></script>
   </body>
 </html>
