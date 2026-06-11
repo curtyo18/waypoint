@@ -133,8 +133,15 @@ class Sha256Hmac {
     this.chunks.push(toBytes(data))
     return this
   }
-  digest(encoding: 'hex' | 'base64' | 'base64url'): string {
+  digest(): Uint8Array
+  digest(encoding: 'hex' | 'base64' | 'base64url'): string
+  digest(encoding?: 'hex' | 'base64' | 'base64url'): string | Uint8Array {
     const mac = hmacSha256Bytes(this.key, concatBytes(this.chunks))
+    // node:crypto's digest() with no encoding returns a Buffer of raw bytes.
+    // waypoint's jitter.ts calls .digest() argless and indexes mac[i]; without
+    // this branch the shim returned a base64 string, jitter read characters
+    // instead of bytes, and produced NaN waits (entryAt -> null -> malformed).
+    if (encoding === undefined) return mac
     if (encoding === 'hex') return toHex(mac)
     const b64 = toBase64(mac)
     if (encoding === 'base64url') return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
